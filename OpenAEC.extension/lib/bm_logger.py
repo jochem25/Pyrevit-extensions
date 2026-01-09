@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""3BM Bouwkunde - Centrale Logging Module
+"""OpenAEC - Logging Module
 
-Gedeelde logging voor alle pyRevit tools.
-Logs worden opgeslagen in een centrale folder voor MCP access.
+Shared logging for all pyRevit tools.
+Logs are saved to a central folder.
 
-Gebruik in scripts:
-    from lib.bm_logger import get_logger
-    log = get_logger("AutoDim")
-    log.info("Tool gestart")
+Usage:
+    from bm_logger import get_logger
+    log = get_logger("ToolName")
+    log.info("Tool started")
 """
 
 import os
@@ -17,21 +17,17 @@ import traceback
 import codecs
 
 # =============================================================================
-# CONFIGURATIE
+# CONFIGURATION
 # =============================================================================
 
-LOG_PATHS = [
-    r"Z:\50_projecten\7_3BM_bouwkunde\_AI\pyrevit_logs",
-    r"C:\DATA\3BM_projecten\50_projecten\7_3BM_bouwkunde\_AI\pyrevit_logs",
-    os.path.join(os.environ.get('APPDATA', ''), '3BM_Bouwkunde', 'logs'),
-]
-
-FALLBACK_LOG_PATH = os.path.join(os.environ.get('TEMP', 'C:\\Temp'), '3BM_pyrevit_logs')
+# Log directory: %APPDATA%\OpenAEC\logs
+LOG_DIR = os.path.join(os.environ.get('APPDATA', ''), 'OpenAEC', 'logs')
+FALLBACK_LOG_DIR = os.path.join(os.environ.get('TEMP', 'C:\\Temp'), 'OpenAEC_logs')
 
 MAX_LOGS_PER_TOOL = 10
 MAX_LOG_SIZE_MB = 5
 LOG_LEVEL = "DEBUG"
-PRINT_TO_CONSOLE = False  # Zet op False om print errors te voorkomen
+PRINT_TO_CONSOLE = False
 
 
 # =============================================================================
@@ -59,7 +55,7 @@ class LogLevel:
 # LOGGER CLASS
 # =============================================================================
 class BMLogger:
-    """Logger voor 3BM pyRevit tools."""
+    """Logger for OpenAEC pyRevit tools."""
     
     def __init__(self, tool_name):
         self.tool_name = tool_name
@@ -70,32 +66,36 @@ class BMLogger:
         self._write_header()
     
     def _get_log_directory(self):
-        """Vind of maak de log directory."""
-        for path in LOG_PATHS:
-            try:
-                if os.path.exists(os.path.dirname(path)) or os.path.exists(path):
-                    if not os.path.exists(path):
-                        os.makedirs(path)
-                    test_file = os.path.join(path, '.write_test')
-                    with open(test_file, 'w') as f:
-                        f.write('test')
-                    os.remove(test_file)
-                    return path
-            except:
-                continue
+        """Find or create the log directory."""
+        # Try primary location
+        try:
+            if not os.path.exists(LOG_DIR):
+                os.makedirs(LOG_DIR)
+            # Test write access
+            test_file = os.path.join(LOG_DIR, '.write_test')
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+            return LOG_DIR
+        except:
+            pass
         
-        if not os.path.exists(FALLBACK_LOG_PATH):
-            os.makedirs(FALLBACK_LOG_PATH)
-        return FALLBACK_LOG_PATH
+        # Fallback to temp
+        try:
+            if not os.path.exists(FALLBACK_LOG_DIR):
+                os.makedirs(FALLBACK_LOG_DIR)
+            return FALLBACK_LOG_DIR
+        except:
+            return os.environ.get('TEMP', 'C:\\Temp')
     
     def _create_log_file(self):
-        """Maak nieuw log bestand."""
+        """Create new log file."""
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         filename = "{}_{}.log".format(self.tool_name, timestamp)
         return os.path.join(self.log_dir, filename)
     
     def _cleanup_old_logs(self):
-        """Verwijder oude logs."""
+        """Remove old logs."""
         try:
             pattern = "{}_".format(self.tool_name)
             logs = []
@@ -117,10 +117,10 @@ class BMLogger:
             pass
     
     def _write_header(self):
-        """Schrijf log header."""
+        """Write log header."""
         header = [
             "=" * 70,
-            "3BM BOUWKUNDE - {} LOG".format(self.tool_name.upper()),
+            "OPENAEC - {} LOG".format(self.tool_name.upper()),
             "=" * 70,
             "Timestamp: {}".format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
             "Log file: {}".format(self.log_file),
@@ -131,25 +131,25 @@ class BMLogger:
         self._write_lines(header)
     
     def _write_lines(self, lines):
-        """Schrijf regels naar log file."""
+        """Write lines to log file."""
         try:
             with codecs.open(self.log_file, 'a', encoding='utf-8') as f:
                 for line in lines:
                     f.write(line + "\n")
         except:
-            pass  # Silently fail
+            pass
     
     def _safe_print(self, line):
-        """Veilige print die niet crasht."""
+        """Safe print that doesn't crash."""
         if not PRINT_TO_CONSOLE:
             return
         try:
             print(line)
         except:
-            pass  # Silently fail als output window problemen heeft
+            pass
     
     def _format_message(self, level, message, **kwargs):
-        """Formatteer log message."""
+        """Format log message."""
         timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
         level_name = LogLevel.get_name(level)
         
@@ -167,7 +167,7 @@ class BMLogger:
         return lines
     
     def _log(self, level, message, **kwargs):
-        """Interne log methode."""
+        """Internal log method."""
         if level >= self.log_level:
             lines = self._format_message(level, message, **kwargs)
             self._write_lines(lines)
@@ -228,7 +228,7 @@ class BMLogger:
             self.info("  {}: {}".format(key, value))
     
     def finalize(self, success=True, message=None):
-        """Sluit log af."""
+        """Close log."""
         self._write_lines([
             "",
             "-" * 70,
@@ -253,14 +253,14 @@ class BMLogger:
 _loggers = {}
 
 def get_logger(tool_name):
-    """Verkrijg logger instance."""
+    """Get logger instance."""
     if tool_name not in _loggers:
         _loggers[tool_name] = BMLogger(tool_name)
     return _loggers[tool_name]
 
 
 def get_log_directory():
-    """Geef log directory pad."""
+    """Get log directory path."""
     temp_logger = BMLogger("_temp")
     log_dir = temp_logger.log_dir
     try:
